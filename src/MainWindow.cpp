@@ -1,3 +1,4 @@
+#include <AUI/View/AForEachUI.h>
 #include "MainWindow.h"
 #include <AUI/Util/UIBuildingHelpers.h>
 #include <AUI/View/ALabel.h>
@@ -5,43 +6,94 @@
 #include <AUI/Platform/APlatform.h>
 #include <AUI/View/ADrawableView.h>
 #include <AUI/View/AProgressBar.h>
+#include <AUI/View/ASlider.h>
+#include <AUI/View/ASpacerFixed.h>
+#include <AUI/View/AScrollArea.h>
+#include "fluent_icons.h"
+#include "model/State.h"
 
 using namespace declarative;
 
-MainWindow::MainWindow(_<MyUpdater> updater)
-  : AWindow("Project template app", 300_dp, 200_dp), mUpdater(std::move(updater)) {
-    setContents(Centered { Vertical {
-      Centered { Icon { ":img/icon.svg" } with_style { FixedSize(64_dp) } },
-      Centered { Label { "Hello world from AUI!" } },
-      _new<AButton>("Visit GitHub repo")
-          .connect(&AView::clicked, this, [] { APlatform::openUrl("https://github.com/aui-framework/aui"); }),
-      _new<AButton>("Visit docs")
-          .connect(&AView::clicked, this, [] { APlatform::openUrl("https://aui-framework.github.io/"); }),
-      _new<AButton>("Submit an issue")
-          .connect(
-              &AView::clicked, this, [] { APlatform::openUrl("https://github.com/aui-framework/aui/issues/new"); }),
-      CustomLayout {} & mUpdater->status.readProjected([&updater = mUpdater](const std::any& status) -> _<AView> {
-          if (std::any_cast<AUpdater::StatusIdle>(&status)) {
-              return _new<AButton>("Check for updates").connect(&AView::clicked, slot(updater)::checkForUpdates);
-          }
-          if (std::any_cast<AUpdater::StatusCheckingForUpdates>(&status)) {
-              return Label { "Checking for updates..." };
-          }
-          if (auto downloading = std::any_cast<AUpdater::StatusDownloading>(&status)) {
-              return Vertical {
-                  Label { "Downloading..." },
-                  _new<AProgressBar>() & downloading->progress,
-              };
-          }
-          if (std::any_cast<AUpdater::StatusWaitingForApplyAndRestart>(&status)) {
-              return _new<AButton>("Apply update and restart")
-                  .connect(&AView::clicked, slot(updater)::applyUpdateAndRestart);
-          }
-          return nullptr;
-      }),
-      Label { "Btw, 2 + 2 = {}"_format(sum(2, 2)) },
-      Label { "Version: " AUI_PP_STRINGIZE(AUI_CMAKE_PROJECT_VERSION) },
-    } });
+
+static _<AView> playlistView(State& state) {
+    return AScrollArea::Builder().withContents(
+        AUI_DECLARATIVE_FOR(i, state.songs, AVerticalLayout) {
+            return Label { i->title };
+        }
+    ).build() with_style {
+        FixedSize { 200_dp, {} },
+        BackgroundSolid { AColor::BLACK.transparentize(0.7f) },
+    };
 }
 
-int MainWindow::sum(int a, int b) { return a + b; }
+static _<AView> playerView() {
+    return Centered::Expanding {
+        Vertical {
+          Centered {
+            _new<AView>() with_style {
+              FixedSize { 128_dp },
+              BackgroundSolid { AColor::GRAY },
+              BorderRadius { 4_dp },
+              BoxShadow { 0, 4_dp, 32_dp, AColor::BLACK.transparentize(0.7f) },
+            },
+          },
+
+          SpacerFixed { 32_dp },
+
+          _new<ASlider>(),
+          Horizontal {
+            Label { "00:00" } with_style { ATextAlign::CENTER },
+            SpacerExpanding {},
+            Label { "00:00" } with_style { ATextAlign::CENTER },
+          },
+
+          SpacerFixed { 16_dp },
+
+          Label { "Title" } with_style { ATextAlign::CENTER, FontSize(14_pt) },
+          Label { "Artist" } with_style { ATextAlign::CENTER },
+          Label { "Album" } with_style { ATextAlign::CENTER },
+
+          SpacerFixed { 16_dp },
+
+          Centered {
+            Horizontal {
+              Label { fluent_icons::ic_fluent_previous_48_filled } with_style {
+                Font { ":img/FluentSystemIcons-Filled.ttf" },
+                FontSize { 32_dp },
+              },
+              Label { fluent_icons::ic_fluent_play_circle_48_filled } with_style {
+                Font { ":img/FluentSystemIcons-Filled.ttf" },
+                FontSize { 48_dp },
+              },
+              Label { fluent_icons::ic_fluent_next_48_filled } with_style {
+                Font { ":img/FluentSystemIcons-Filled.ttf" },
+                FontSize { 32_dp },
+              },
+            } with_style { LayoutSpacing { 8_dp } },
+          },
+        } with_style { MinSize { 200_dp }, Padding { 32_dp, 64_dp } },
+    };
+}
+
+MainWindow::MainWindow() : AWindow("Project template app", 400_dp, 600_dp) {
+    setExtraStylesheet(AStylesheet {
+      {
+        t<AView>(),
+        TextColor { AColor::WHITE },
+      },
+    });
+
+    mState.songs << _new<Song>("Test");
+    mState.songs << _new<Song>("Test1");
+    mState.songs << _new<Song>("stariy Perdoon");
+    mState.songs << _new<Song>("XyeCoC");
+    mState.songs << _new<Song>("XyeCoC kura perdoli");
+
+    setContents(Centered {
+        Horizontal::Expanding { playlistView(mState), playerView(), }
+    } with_style {
+      BackgroundSolid { 0x2c2c2c_rgb },
+      Padding { 0 },
+      Margin { 0 },
+    });
+}
