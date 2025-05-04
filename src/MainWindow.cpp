@@ -1,3 +1,4 @@
+#include <range/v3/all.hpp>
 #include <AUI/View/AForEachUI.h>
 #include "MainWindow.h"
 #include <AUI/Util/UIBuildingHelpers.h>
@@ -9,20 +10,44 @@
 #include <AUI/View/ASlider.h>
 #include <AUI/View/ASpacerFixed.h>
 #include <AUI/View/AScrollArea.h>
+#include <AUI/View/ASpinnerV2.h>
+#include <AUI/View/AText.h>
+#include <range/v3/action/sort.hpp>
 #include "fluent_icons.h"
 #include "model/State.h"
 
 using namespace declarative;
 
-
 static _<AView> playlistView(State& state) {
-    return AScrollArea::Builder().withContents(
-        AUI_DECLARATIVE_FOR(i, state.songs, AVerticalLayout) {
-            return Label { i->title };
-        }
-    ).build() with_style {
-        FixedSize { 200_dp, {} },
-        BackgroundSolid { AColor::BLACK.transparentize(0.7f) },
+    if (state.songs.empty()) {
+        return Centered {
+            Vertical {
+              Label { "No songs found" } with_style {
+                ATextAlign::CENTER,
+                FontSize { 14_pt },
+              },
+              AText::fromString("Add songs to your music folder.") with_style { ATextAlign::CENTER },
+              _new<AButton>("Open Music Folder") let {
+                      AObject::connect(it->clicked, AObject::GENERIC_OBSERVER, [path = state.path] {
+                          APlatform::openUrl(path);
+                      });
+                  },
+            },
+        };
+    }
+
+    return Vertical {
+        AScrollArea::Builder()
+            .withContents(
+                AUI_DECLARATIVE_FOR(i, state.songs, AVerticalLayout) {
+                return Label { i->title } with_style { ATextOverflow::ELLIPSIS };
+            })
+            .build() with_style {
+              ScrollbarAppearance {
+                ScrollbarAppearance::ALWAYS,
+                ScrollbarAppearance::NEVER,
+              },
+            },
     };
 }
 
@@ -81,17 +106,49 @@ MainWindow::MainWindow() : AWindow("Project template app", 400_dp, 600_dp) {
         t<AView>(),
         TextColor { AColor::WHITE },
       },
+      {
+        t<AButton>(),
+        BackgroundSolid { 0x88000000_argb },
+        Border { nullptr },
+      } });
+
+    present(_new<ASpinnerV2>() with_style {
+      FixedSize { 32_dp, 32_dp },
+      BackgroundImage { {}, 0xff3c3c43_argb },
     });
 
-    mState.songs << _new<Song>("Test");
-    mState.songs << _new<Song>("Test1");
-    mState.songs << _new<Song>("stariy Perdoon");
-    mState.songs << _new<Song>("XyeCoC");
-    mState.songs << _new<Song>("XyeCoC kura perdoli");
+    loadPlaylist();
+}
+void MainWindow::loadPlaylist() {
+    auto lookIn = mState.path;
+    mAsync << async {
+        AVector<_<Song>> songs;
+        for (const auto& p : lookIn.listDir(AFileListFlags::RECURSIVE | AFileListFlags::REGULAR_FILES)) {
+            songs << aui::ptr::manage(new Song {
+              .location = p,
+              .title = p.filenameWithoutExtension(),
+            });
+        }
 
-    setContents(Centered {
-        Horizontal::Expanding { playlistView(mState), playerView(), }
-    } with_style {
+        ranges::sort(songs, [](const auto& a, const auto& b) { return a->title < b->title; });
+
+        ui_thread {
+            mState.songs = std::move(songs);
+            present(Horizontal::Expanding {
+              playlistView(mState) with_style {
+                FixedSize { 200_dp, {} },
+                BackgroundSolid { AColor::BLACK.transparentize(0.7f) },
+              },
+              playerView(),
+            });
+        };
+
+        return songs;
+    };
+}
+
+void MainWindow::present(_<AView> view) {
+    setContents(Centered { std::move(view) } with_style {
       BackgroundSolid { 0x2c2c2c_rgb },
       Padding { 0 },
       Margin { 0 },

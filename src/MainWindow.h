@@ -1,6 +1,7 @@
 #pragma once
 
 #include <AUI/Platform/AWindow.h>
+#include <AUI/Thread/AAsyncHolder.h>
 #include "model/State.h"
 
 class MainWindow: public AWindow {
@@ -9,4 +10,9 @@ public:
 
 private:
     State mState;
+    AAsyncHolder mAsync;
+
+    void present(_<AView> view);
+
+    void loadPlaylist();
 };
