@@ -15,4 +15,7 @@ private:
     void present(_<AView> view);
 
     void loadPlaylist();
+
+    _<AView> playlistView();
+    _<AView> playerView();
 };

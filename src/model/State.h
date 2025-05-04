@@ -8,6 +8,7 @@ struct Song {
 };
 
 struct State {
-    AVector<_<Song>> songs;
+    AProperty<AVector<_<Song>>> songs;
     APath path = APath::getDefaultPath(APath::HOME) / "Music";
+    AProperty<_<Song>> currentSong;
 };

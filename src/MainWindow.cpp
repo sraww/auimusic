@@ -18,8 +18,8 @@
 
 using namespace declarative;
 
-static _<AView> playlistView(State& state) {
-    if (state.songs.empty()) {
+_<AView> MainWindow::playlistView() {
+    if (mState.songs->empty()) {
         return Centered {
             Vertical {
               Label { "No songs found" } with_style {
@@ -28,8 +28,8 @@ static _<AView> playlistView(State& state) {
               },
               AText::fromString("Add songs to your music folder.") with_style { ATextAlign::CENTER },
               _new<AButton>("Open Music Folder") let {
-                      AObject::connect(it->clicked, AObject::GENERIC_OBSERVER, [path = state.path] {
-                          APlatform::openUrl(path);
+                      AObject::connect(it->clicked, AObject::GENERIC_OBSERVER, [this] {
+                          APlatform::openUrl(mState.path);
                       });
                   },
             },
@@ -39,8 +39,12 @@ static _<AView> playlistView(State& state) {
     return Vertical {
         AScrollArea::Builder()
             .withContents(
-                AUI_DECLARATIVE_FOR(i, state.songs, AVerticalLayout) {
-                return Label { i->title } with_style { ATextOverflow::ELLIPSIS };
+                AUI_DECLARATIVE_FOR(i, *mState.songs, AVerticalLayout) {
+                return Label { i->title } with_style { ATextOverflow::ELLIPSIS } let {
+                    AObject::connect(it->clicked, AObject::GENERIC_OBSERVER, [this, i] {
+                        mState.currentSong = i;
+                    });
+                };
             })
             .build() with_style {
               ScrollbarAppearance {
@@ -51,7 +55,7 @@ static _<AView> playlistView(State& state) {
     };
 }
 
-static _<AView> playerView() {
+_<AView> MainWindow::playerView() {
     return Centered::Expanding {
         Vertical {
           Centered {
@@ -74,9 +78,10 @@ static _<AView> playerView() {
 
           SpacerFixed { 16_dp },
 
-          Label { "Title" } with_style { ATextAlign::CENTER, FontSize(14_pt) },
-          Label { "Artist" } with_style { ATextAlign::CENTER },
-          Label { "Album" } with_style { ATextAlign::CENTER },
+          Label {} with_style { ATextAlign::CENTER, FontSize(14_pt), ATextOverflow::ELLIPSIS }
+              & mState.currentSong.readProjected([](const _<Song>& song) { return song ? song->title : " "; }),
+          Label {} with_style { ATextAlign::CENTER },
+          Label {} with_style { ATextAlign::CENTER },
 
           SpacerFixed { 16_dp },
 
@@ -96,7 +101,12 @@ static _<AView> playerView() {
               },
             } with_style { LayoutSpacing { 8_dp } },
           },
-        } with_style { MinSize { 200_dp }, Padding { 32_dp, 64_dp } },
+        } with_style {
+          MinSize { 250_dp },
+          Padding { 32_dp, 64_dp },
+        },
+    } with_style {
+        BoxShadowInner { 0, 64_dp, 64_dp, AColor::BLACK.transparentize(0.7f) },
     };
 }
 
@@ -135,7 +145,7 @@ void MainWindow::loadPlaylist() {
         ui_thread {
             mState.songs = std::move(songs);
             present(Horizontal::Expanding {
-              playlistView(mState) with_style {
+              playlistView() with_style {
                 FixedSize { 200_dp, {} },
                 BackgroundSolid { AColor::BLACK.transparentize(0.7f) },
               },
