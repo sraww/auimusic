@@ -21,13 +21,25 @@ auib_import(aui https://github.com/aui-framework/aui
         COMPONENTS core views curl json crypt updater
         VERSION ${AUI_VERSION})
 
+auib_import(dr_libs https://github.com/mackron/dr_libs
+            VERSION 9cb7092
+            ADD_SUBDIRECTORY
+)
+
+auib_import(id3v2lib https://github.com/larsbs/id3v2lib
+            VERSION 141ffb8
+            ADD_SUBDIRECTORY)
+
+add_library(dr_libs INTERFACE IMPORTED)
+target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
+
 
 # Create the executable. This function automatically links all sources from the src/ folder,
 # creates CMake target and places the resulting executable to bin/ folder.
 aui_executable(${PROJECT_NAME})
 
 # Link required libs
-aui_link(${PROJECT_NAME} PRIVATE aui::core aui::views aui::updater)
+aui_link(${PROJECT_NAME} PRIVATE aui::core aui::views aui::updater dr_libs id3v2lib)
 
 # Compile assets
 aui_compile_assets(${PROJECT_NAME})

@@ -15,6 +15,7 @@
 #include <range/v3/action/sort.hpp>
 #include "fluent_icons.h"
 #include "model/State.h"
+#include "metadata.h"
 
 using namespace declarative;
 
@@ -22,6 +23,7 @@ _<AView> MainWindow::playlistView() {
     if (mState.songs->empty()) {
         return Centered {
             Vertical {
+              SpacerFixed { 50_dp },
               Label { "No songs found" } with_style {
                 ATextAlign::CENTER,
                 FontSize { 14_pt },
@@ -37,6 +39,7 @@ _<AView> MainWindow::playlistView() {
     }
 
     return Vertical {
+        SpacerFixed { 50_dp },
         AScrollArea::Builder()
             .withContents(
                 AUI_DECLARATIVE_FOR(i, *mState.songs, AVerticalLayout) {
@@ -57,13 +60,30 @@ _<AView> MainWindow::playlistView() {
 
 _<AView> MainWindow::playerView() {
     return Centered::Expanding {
+        _new<ADrawableView>() with_style {
+          Expanding(),
+        } let {
+          connect(mState.currentThumbnail, slot(it)::setDrawable);
+        },
+
+        _new<AView>() with_style {
+          Expanding(),
+          BackgroundSolid { AColor::BLACK.transparentize(0.5f) },
+          Backdrop { Backdrop::GaussianBlur { 64_dp } },
+        },
+
         Vertical {
+          SpacerFixed { 50_dp },
           Centered {
-            _new<AView>() with_style {
+            Centered{
+              _new<ADrawableView>() with_style { Expanding() } let {
+                  connect(mState.currentThumbnail, slot(it)::setDrawable);
+              },
+            } with_style {
               FixedSize { 128_dp },
               BackgroundSolid { AColor::GRAY },
-              BorderRadius { 4_dp },
-              BoxShadow { 0, 4_dp, 32_dp, AColor::BLACK.transparentize(0.7f) },
+              BorderRadius { 8_dp },
+              BoxShadow { 0, 4_dp, 32_dp, AColor::BLACK.transparentize(0.5f) },
             },
           },
 
@@ -106,11 +126,11 @@ _<AView> MainWindow::playerView() {
           Padding { 32_dp, 64_dp },
         },
     } with_style {
-        BoxShadowInner { 0, 64_dp, 64_dp, AColor::BLACK.transparentize(0.7f) },
+        BoxShadowInner { 0, 64_dp, 64_dp, AColor::BLACK.transparentize(0.9f) },
     };
 }
 
-MainWindow::MainWindow() : AWindow("Project template app", 400_dp, 600_dp) {
+MainWindow::MainWindow() : AWindow("место для вашей шутки про жопу", 400_dp, 600_dp) {
     setExtraStylesheet(AStylesheet {
       {
         t<AView>(),
@@ -125,6 +145,19 @@ MainWindow::MainWindow() : AWindow("Project template app", 400_dp, 600_dp) {
     present(_new<ASpinnerV2>() with_style {
       FixedSize { 32_dp, 32_dp },
       BackgroundImage { {}, 0xff3c3c43_argb },
+    });
+
+    connect(mState.currentSong.changed, [this](const _<Song>& currentSong) {
+        if (*currentSong->thumbnail != nullptr) {
+            return;
+        }
+        auto copy = *currentSong;
+        mAsync << async mutable {
+            metadata::populate(copy);
+            ui_thread {
+                **mState.currentSong = copy;
+            };
+        };
     });
 
     loadPlaylist();
