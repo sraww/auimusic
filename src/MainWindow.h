@@ -2,6 +2,7 @@
 
 #include <AUI/Platform/AWindow.h>
 #include <AUI/Thread/AAsyncHolder.h>
+#include <AUI/Audio/IAudioPlayer.h>
 #include "model/State.h"
 
 class MainWindow: public AWindow {
@@ -16,6 +17,10 @@ private:
 
     void loadPlaylist();
 
+    _<ISoundInputStream> open(const AUrl& url);
+
     _<AView> playlistView();
     _<AView> playerView();
+
+    void togglePlay();
 };

@@ -18,7 +18,7 @@ include(${CMAKE_CURRENT_BINARY_DIR}/aui.boot.cmake)
 
 # import AUI
 auib_import(aui https://github.com/aui-framework/aui
-        COMPONENTS core views curl json crypt updater
+        COMPONENTS core views curl json crypt updater audio
         VERSION ${AUI_VERSION})
 
 auib_import(dr_libs https://github.com/mackron/dr_libs
@@ -39,7 +39,7 @@ target_include_directories(dr_libs INTERFACE ${dr_libs_SOURCE_DIR})
 aui_executable(${PROJECT_NAME})
 
 # Link required libs
-aui_link(${PROJECT_NAME} PRIVATE aui::core aui::views aui::updater dr_libs id3v2lib)
+aui_link(${PROJECT_NAME} PRIVATE aui::core aui::views aui::updater aui::audio dr_libs id3v2lib)
 
 # Compile assets
 aui_compile_assets(${PROJECT_NAME})

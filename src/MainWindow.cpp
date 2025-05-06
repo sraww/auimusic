@@ -12,12 +12,22 @@
 #include <AUI/View/AScrollArea.h>
 #include <AUI/View/ASpinnerV2.h>
 #include <AUI/View/AText.h>
+#include <AUI/Audio/IAudioPlayer.h>
 #include <range/v3/action/sort.hpp>
+#include <AUI/Platform/AMessageBox.h>
+#include <AUI/Audio/ABadFormatException.h>
 #include "fluent_icons.h"
 #include "model/State.h"
 #include "metadata.h"
+#include "MP3SoundStream.h"
+
+static constexpr auto LOG_TAG = "MainWindow";
 
 using namespace declarative;
+
+static auto timeFormatter(std::chrono::milliseconds position) {
+    return "{:%M:%S}"_format(std::chrono::duration_cast<std::chrono::seconds>(position));
+}
 
 _<AView> MainWindow::playlistView() {
     if (mState.songs->empty()) {
@@ -44,9 +54,7 @@ _<AView> MainWindow::playlistView() {
             .withContents(
                 AUI_DECLARATIVE_FOR(i, *mState.songs, AVerticalLayout) {
                 return Label { i->title } with_style { ATextOverflow::ELLIPSIS } let {
-                    AObject::connect(it->clicked, AObject::GENERIC_OBSERVER, [this, i] {
-                        mState.currentSong = i;
-                    });
+                    connect(it->clicked, [this, i] { mState.currentSong = i; });
                 };
             })
             .build() with_style {
@@ -62,9 +70,7 @@ _<AView> MainWindow::playerView() {
     return Centered::Expanding {
         _new<ADrawableView>() with_style {
           Expanding(),
-        } let {
-          connect(mState.currentThumbnail, slot(it)::setDrawable);
-        },
+        } let { connect(mState.currentThumbnail, slot(it)::setDrawable); },
 
         _new<AView>() with_style {
           Expanding(),
@@ -75,10 +81,8 @@ _<AView> MainWindow::playerView() {
         Vertical {
           SpacerFixed { 50_dp },
           Centered {
-            Centered{
-              _new<ADrawableView>() with_style { Expanding() } let {
-                  connect(mState.currentThumbnail, slot(it)::setDrawable);
-              },
+            Centered {
+              _new<ADrawableView>() with_style { Expanding() } let { connect(mState.currentThumbnail, slot(it)::setDrawable); },
             } with_style {
               FixedSize { 128_dp },
               BackgroundSolid { AColor::GRAY },
@@ -89,17 +93,29 @@ _<AView> MainWindow::playerView() {
 
           SpacerFixed { 32_dp },
 
-          _new<ASlider>(),
+          _new<ASlider>() let {
+              connect(mState.currentPosition.readProjected([this](std::chrono::milliseconds m) -> aui::float_within_0_1 {
+                  auto duration = mState.currentDuration->count();
+                  if (duration == 0) {
+                      return 0;
+                  }
+                  return float(m.count()) / float(duration);
+              }), slot(it)::setValue);
+          },
           Horizontal {
-            Label { "00:00" } with_style { ATextAlign::CENTER },
+            Label {} with_style { ATextAlign::CENTER } let {
+                connect(mState.currentPosition.readProjected(timeFormatter), slot(it)::setText);
+            },
             SpacerExpanding {},
-            Label { "00:00" } with_style { ATextAlign::CENTER },
+            Label {} with_style { ATextAlign::CENTER } let {
+                connect(mState.currentDuration.readProjected(timeFormatter), slot(it)::setText);
+            },
           },
 
           SpacerFixed { 16_dp },
 
-          Label {} with_style { ATextAlign::CENTER, FontSize(14_pt), ATextOverflow::ELLIPSIS }
-              & mState.currentSong.readProjected([](const _<Song>& song) { return song ? song->title : " "; }),
+          Label {} with_style { ATextAlign::CENTER, FontSize(14_pt), ATextOverflow::ELLIPSIS } &
+              mState.currentSong.readProjected([](const _<Song>& song) { return song ? song->title : " "; }),
           Label {} with_style { ATextAlign::CENTER },
           Label {} with_style { ATextAlign::CENTER },
 
@@ -114,7 +130,7 @@ _<AView> MainWindow::playerView() {
               Label { fluent_icons::ic_fluent_play_circle_48_filled } with_style {
                 Font { ":img/FluentSystemIcons-Filled.ttf" },
                 FontSize { 48_dp },
-              },
+              } let {connect(it->clicked, me::togglePlay); },
               Label { fluent_icons::ic_fluent_next_48_filled } with_style {
                 Font { ":img/FluentSystemIcons-Filled.ttf" },
                 FontSize { 32_dp },
@@ -130,7 +146,7 @@ _<AView> MainWindow::playerView() {
     };
 }
 
-MainWindow::MainWindow() : AWindow("место для вашей шутки про жопу", 400_dp, 600_dp) {
+MainWindow::MainWindow() : AWindow("AUImusic", 400_dp, 600_dp) {
     setExtraStylesheet(AStylesheet {
       {
         t<AView>(),
@@ -147,16 +163,42 @@ MainWindow::MainWindow() : AWindow("место для вашей шутки пр
       BackgroundImage { {}, 0xff3c3c43_argb },
     });
 
+    connect(mState.isPlaying.changed, [this](bool isPlaying) {
+        if (mState.currentPlayer == nullptr) {
+            return;
+        }
+        if (isPlaying) {
+            mState.currentPlayer->play();
+        } else {
+            mState.currentPlayer->pause();
+        }
+    });
+
     connect(mState.currentSong.changed, [this](const _<Song>& currentSong) {
+        mState.isPlaying = false;
+        if (mState.currentPlayer != nullptr) {
+            mState.currentPlayer = nullptr;
+        }
+        mState.currentStream = nullptr;
+        try {
+            auto stream = open(currentSong->location);
+            if (auto finiteMedia = _cast<IFiniteMedia>(stream)) {
+                mState.currentStream = std::move(finiteMedia);
+            }
+            mState.currentPlayer = IAudioPlayer::fromStream(std::move(stream));
+            mState.isPlaying = true;
+        } catch (const AException& e) {
+            AMessageBox::show(this, "Failed to play song", e.getMessage());
+            ALogger::err(LOG_TAG) << "Failed to play song: " << e;
+        }
+
         if (*currentSong->thumbnail != nullptr) {
             return;
         }
         auto copy = *currentSong;
         mAsync << async mutable {
             metadata::populate(copy);
-            ui_thread {
-                **mState.currentSong = copy;
-            };
+            ui_thread { **mState.currentSong = copy; };
         };
     });
 
@@ -196,4 +238,22 @@ void MainWindow::present(_<AView> view) {
       Padding { 0 },
       Margin { 0 },
     });
+}
+
+_<ISoundInputStream> MainWindow::open(const AUrl& url) {
+    try {
+        return ISoundInputStream::fromUrl(url);
+    } catch (const aui::audio::ABadFormatException& e) {
+    }
+
+    try {
+        return _new<MP3SoundStream>(url.open());
+    } catch (const aui::audio::ABadFormatException& e) {
+    }
+
+    throw AException("unrecognized format: " + url.full());
+}
+
+void MainWindow::togglePlay() {
+    mState.isPlaying = !mState.isPlaying;
 }
