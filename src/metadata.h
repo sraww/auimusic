@@ -5,3 +5,4 @@
 namespace metadata {
 void populate(Song& song);
 }
+
