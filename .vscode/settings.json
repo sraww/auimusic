@@ -1,4 +1,3 @@
-
 {
     "clang-format.arguments": [
         "-assume-filename=${workspaceFolder}/.clang-format"
