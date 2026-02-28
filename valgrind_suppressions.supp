@@ -7,7 +7,6 @@
 # This file is a suppression list for valgrind (dynamic analysis tool). Use this file as such:
 # valgrind --suppressions=valgrind_suppressions.supp  ./Tests
 
-
 {
    Backtrace
    Memcheck:Param
